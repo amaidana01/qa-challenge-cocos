@@ -101,10 +101,18 @@ export class TradingApi {
     return this.post("/orders", body)
   }
 
-  /** Envía una orden que DEBE aceptarse y devuelve la orden creada. */
+  /**
+   * Envía una orden que DEBE aceptarse y devuelve la orden creada.
+   *
+   * Acepta cualquier 2xx, igual que la app (axios). El código exacto (201) se
+   * verifica en un test propio: si lo exigiéramos acá, un desvío menor en el
+   * código de respuesta haría fallar todos los tests de órdenes en el primer
+   * paso y ESCONDERÍA los bugs de negocio que vienen después.
+   */
   async placeOrder(order: OrderRequest): Promise<Order> {
     const res = await this.createOrder(order)
-    expect(res.status, `POST /orders ${JSON.stringify(order)} → ${JSON.stringify(res.body)}`).toBe(201)
+    expect(res.status, `POST /orders ${JSON.stringify(order)} → ${JSON.stringify(res.body)}`).toBeGreaterThanOrEqual(200)
+    expect(res.status, `POST /orders ${JSON.stringify(order)} → ${JSON.stringify(res.body)}`).toBeLessThan(300)
     return parse(orderSchema, res.body, "POST /orders")
   }
 

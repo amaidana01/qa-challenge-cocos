@@ -48,6 +48,14 @@ test.describe("Órdenes MARKET", () => {
     })
   })
 
+  test("crear una orden responde 201 Created", {tag: "@P2"}, async ({api, stock}) => {
+    // Contrato HTTP: una orden creada es un recurso nuevo → 201. La app acepta
+    // cualquier 2xx, por eso es P2: no rompe al usuario, pero sí a otros
+    // clientes que dependan del contrato.
+    const res = await api.createOrder({instrument_id: stock.id, side: "BUY", type: "MARKET", quantity: 1})
+    expect(res.status).toBe(201)
+  })
+
   test("venta parcial: suma el cash y NO cambia el costo promedio", {tag: "@P0"}, async ({api, stock}) => {
     await api.placeOrder({instrument_id: stock.id, side: "BUY", type: "MARKET", quantity: 10})
 
