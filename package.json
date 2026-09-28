@@ -1,0 +1,26 @@
+{
+  "name": "qa-challenge-cocos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Suite de pruebas automatizadas de la API de trading de app-qa (Cocos)",
+  "scripts": {
+    "test": "playwright test",
+    "test:off": "BUGS_TIER=off playwright test",
+    "test:easy": "BUGS_TIER=easy playwright test",
+    "test:medium": "BUGS_TIER=medium playwright test",
+    "test:hard": "BUGS_TIER=hard playwright test",
+    "test:slow": "RUN_SLOW=1 playwright test --grep @slow",
+    "tiers": "node scripts/tier-matrix.mjs",
+    "report": "playwright show-report reports/html",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.3",
+    "zod": "4.6.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
