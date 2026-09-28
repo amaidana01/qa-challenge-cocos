@@ -1,0 +1,2125 @@
+{
+  "info": {
+    "name": "Challenge QA · app-qa (exploración)",
+    "description": "Exploración de la API del challenge. Antes de empezar: en la pestaña Variables de la colección, poné tu candidateId. Las carpetas 03, 05 y 06 empiezan con un Reset, así que se pueden correr completas con el Runner. Para comparar niveles de bugs, cambiá bugsTier (off/easy/medium/hard) y candidateId.\n\nCada request tiene una descripción con qué prueba y qué observamos. Los tests muestran PASS/FAIL en la pestaña Test Results.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 · Arranque",
+      "description": "Primer contacto: la API responde y exige los headers.",
+      "item": [
+        {
+          "name": "Sin headers → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ]
+            },
+            "description": "Sin X-Enable-Bugs la API debe responder 400. Resultado observado: 400 con mensaje claro. ✅"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset de la cuenta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reset"
+              ]
+            },
+            "description": "Borra órdenes y portafolio de {{candidateId}}. Útil para volver a empezar una cuenta de exploración."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 · Consultas (lectura)",
+      "description": "Endpoints de sólo lectura. Instrumentos y precios son compartidos; portafolio y órdenes son por candidato.",
+      "item": [
+        {
+          "name": "Instrumentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ]
+            },
+            "description": "Listado completo (26 instrumentos, incluido ARS tipo MONEDA). Los precios fueron estáticos durante toda la exploración."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test(\"26 instrumentos\", () => pm.expect(list).to.have.length(26));",
+                  "pm.test(\"Campos y tipos correctos\", () => list.forEach(i => { pm.expect(i.id).to.be.a(\"number\"); pm.expect(i.ticker).to.be.a(\"string\"); pm.expect(i.name).to.be.a(\"string\"); pm.expect(i.last_price).to.be.a(\"number\").above(0); pm.expect(i.close_price).to.be.a(\"number\").above(0); }));",
+                  "pm.test(\"IDs y tickers únicos\", () => { pm.expect(new Set(list.map(i => i.id)).size).to.eql(list.length); pm.expect(new Set(list.map(i => i.ticker)).size).to.eql(list.length); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Portafolio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/portfolio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "portfolio"
+              ]
+            },
+            "description": "Después del Reset de la carpeta 00: cash 1.000.000 y sin holdings. Cash y holdings van NETOS de lo reservado por órdenes PENDING."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json();",
+                  "pm.test(\"Cash inicial 1.000.000\", () => pm.expect(p.cash).to.eql(1000000));",
+                  "pm.test(\"Sin holdings\", () => pm.expect(p.holdings).to.have.length(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historial de órdenes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Órdenes de {{candidateId}}. Los IDs son globales y aleatorios: no sirven para inferir orden."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Historial vacío tras reset\", () => pm.expect(pm.response.json()).to.have.length(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 · Búsqueda",
+      "description": "Búsqueda por ticker.",
+      "item": [
+        {
+          "name": "Parcial: DYC",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=DYC",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "DYC"
+                }
+              ]
+            },
+            "description": "Encuentra DYCA. ✅"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve sólo DYCA\", () => pm.expect(pm.response.json().map(i => i.ticker)).to.eql([\"DYCA\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Minúsculas: dyc",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=dyc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "dyc"
+                }
+              ]
+            },
+            "description": "No distingue mayúsculas. ✅"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve sólo DYCA\", () => pm.expect(pm.response.json().map(i => i.ticker)).to.eql([\"DYCA\"]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Por nombre: Dycasa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=Dycasa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "Dycasa"
+                }
+              ]
+            },
+            "description": "Devuelve []. Coherente con la consigna: la búsqueda es por ticker."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Sin resultados\", () => pm.expect(pm.response.json()).to.have.length(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vacía",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Devuelve los 26 instrumentos. Ambiguo → documentar como supuesto."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Devuelve los 26\", () => pm.expect(pm.response.json()).to.have.length(26));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Comodín: %",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=%25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "%25"
+                }
+              ]
+            },
+            "description": "Devuelve []. No interpreta comodines. ✅"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Sin resultados\", () => pm.expect(pm.response.json()).to.have.length(0));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 · Camino feliz (MARKET)",
+      "description": "Compra y venta a mercado. Empieza con Reset; ejecutá en orden.",
+      "item": [
+        {
+          "name": "Reset (cuenta limpia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reset"
+              ]
+            },
+            "description": "Deja la cuenta en cero para que los números de esta carpeta sean verificables."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leer precio del instrumento 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ]
+            },
+            "description": "Guarda el last_price del instrumento 2 en la variable capxPrice, para comparar sin hardcodear precios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const inst = pm.response.json().find(i => i.id === 2);",
+                  "pm.test(\"Existe el instrumento 2\", () => pm.expect(inst).to.exist);",
+                  "pm.collectionVariables.set(\"capxPrice\", inst.last_price);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Comprar 10 CAPX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Se ejecuta FILLED al last_price (53,68). El cash baja 536,80.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "const o = pm.response.json();",
+                  "pm.test(\"FILLED\", () => pm.expect(o.status).to.eql(\"FILLED\"));",
+                  "pm.test(\"Ejecuta al last_price\", () => pm.expect(o.price).to.eql(Number(pm.collectionVariables.get(\"capxPrice\"))));",
+                  "pm.test(\"Cantidad 10\", () => pm.expect(o.quantity).to.eql(10));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vender 3 CAPX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "FILLED. El cash sube 161,04 y quedan 7 acciones.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "const o = pm.response.json();",
+                  "pm.test(\"FILLED\", () => pm.expect(o.status).to.eql(\"FILLED\"));",
+                  "pm.test(\"Ejecuta al last_price\", () => pm.expect(o.price).to.eql(Number(pm.collectionVariables.get(\"capxPrice\"))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vender 100 CAPX (sin acciones suficientes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Debe rechazarse. ✅",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Insufficient shares\", () => pm.expect(pm.response.json().error).to.eql(\"Insufficient shares\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Comprar 100000 CAPX (sin cash suficiente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Debe rechazarse. ✅",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 100000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Insufficient cash\", () => pm.expect(pm.response.json().error).to.eql(\"Insufficient cash\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Portafolio después",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/portfolio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "portfolio"
+              ]
+            },
+            "description": "Cash = 1.000.000 − 10×precio + 3×precio. CAPX: 7 acciones, costo promedio = precio."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json(); const px = Number(pm.collectionVariables.get(\"capxPrice\")); const h = p.holdings.find(x => x.instrument_id === 2);",
+                  "pm.test(\"Cash cuadra (1.000.000 − 7 × precio)\", () => pm.expect(Math.abs((p.cash - (1000000 - 7 * px)))).to.be.below(0.005));",
+                  "pm.test(\"Una sola posición\", () => pm.expect(p.holdings).to.have.length(1));",
+                  "pm.test(\"CAPX: 7 acciones\", () => pm.expect(h && h.quantity).to.eql(7));",
+                  "pm.test(\"Costo promedio = precio de compra\", () => pm.expect(h.avg_cost_price).to.eql(px));",
+                  "pm.test(\"last_price coincide con /instruments\", () => pm.expect(h.last_price).to.eql(px));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historial después",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Debe haber exactamente 2 órdenes FILLED (los rechazos no se guardan)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const os = pm.response.json();",
+                  "pm.test(\"2 órdenes\", () => pm.expect(os).to.have.length(2));",
+                  "pm.test(\"Todas FILLED\", () => os.forEach(o => pm.expect(o.status).to.eql(\"FILLED\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 · Validaciones (deben rechazarse)",
+      "description": "Entradas inválidas. Todas se rechazan correctamente.",
+      "item": [
+        {
+          "name": "quantity 0",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400. Mensaje 'positive number' (distinto al de 1.5).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "quantity negativa",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": -1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "quantity decimal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400 'positive integer'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sin quantity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Instrumento inexistente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 9999,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Instrument not found\", () => pm.expect(pm.response.json().error).to.eql(\"Instrument not found\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "side inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"HOLD\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "type inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"STOP\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "LIMIT sin price",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "✅ 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: LIMIT orders require a numeric price\", () => pm.expect(pm.response.json().error).to.eql(\"LIMIT orders require a numeric price\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 · Hallazgos",
+      "description": "Comportamientos incorrectos o inesperados. Los tests describen lo CORRECTO esperado, por eso FALLAN en 'off': esa falla es la evidencia del hallazgo.",
+      "item": [
+        {
+          "name": "Reset (cuenta limpia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reset"
+              ]
+            },
+            "description": "Deja la cuenta en cero para que los números de esta carpeta sean verificables."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[BUG crítico] LIMIT con precio negativo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Se acepta como PENDING y la 'reserva' negativa AUMENTA el cash disponible en 5 (genera dinero). Consultá el Portafolio antes y después. La app valida price > 0 en el cliente, la API no.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 1,\n  \"price\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "// Este test describe el comportamiento CORRECTO esperado.",
+                  "// Si falla en \"off\", es un bug de la API (ver descripción)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[BUG alta] LIMIT con precio 0",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Se acepta como PENDING. Una orden a precio 0 no tiene sentido.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 1,\n  \"price\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "// Este test describe el comportamiento CORRECTO esperado.",
+                  "// Si falla en \"off\", es un bug de la API (ver descripción)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[BUG media] quantity como texto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Se acepta y se ejecuta. El contrato dice entero.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": \"2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "// Este test describe el comportamiento CORRECTO esperado.",
+                  "// Si falla en \"off\", es un bug de la API (ver descripción)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Observación] side/type en minúsculas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Se acepta y se normaliza a mayúsculas. Puede ser intencional: documentar como supuesto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"buy\",\n  \"type\": \"market\",\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "// Este test describe el comportamiento CORRECTO esperado.",
+                  "// Si falla en \"off\", es un bug de la API (ver descripción)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Observación] MARKET con price",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "El price se ignora en silencio: se ejecuta a 53,68, no a 1.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 2,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1,\n  \"price\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Ejecuta a last_price, no al price enviado\", () => pm.expect(pm.response.json().price).to.not.eql(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[Observación] Comprar ARS (pesos con pesos)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "La moneda de liquidación es operable: baja el cash y crea una posición 'ARS'. Reportar como observación con dos alternativas.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 26,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "// Este test describe el comportamiento CORRECTO esperado.",
+                  "// Si falla en \"off\", es un bug de la API (ver descripción)."
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 · Reservas y LIMIT",
+      "description": "Empieza con Reset; ejecutá en orden. Las LIMIT se resuelven por tiempo (10–20 min), no por consultar.",
+      "item": [
+        {
+          "name": "Reset (cuenta limpia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reset",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reset"
+              ]
+            },
+            "description": "Deja la cuenta en cero para que los números de esta carpeta sean verificables."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Leer precio del instrumento 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ]
+            },
+            "description": "Guarda el last_price del instrumento 1 en la variable dycaPrice, para comparar sin hardcodear precios."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const inst = pm.response.json().find(i => i.id === 1);",
+                  "pm.test(\"Existe el instrumento 1\", () => pm.expect(inst).to.exist);",
+                  "pm.collectionVariables.set(\"dycaPrice\", inst.last_price);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1. Comprar 20 DYCA a mercado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Base para poder vender.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. LIMIT BUY 5 @ 50 (sobre mercado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "PENDING. Reserva 250 de cash.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"PENDING\", () => pm.expect(pm.response.json().status).to.eql(\"PENDING\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. LIMIT BUY 5 @ 40 (bajo mercado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "PENDING. Reserva 200 de cash.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"BUY\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"PENDING\", () => pm.expect(pm.response.json().status).to.eql(\"PENDING\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. LIMIT SELL 5 @ 40 (bajo mercado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "PENDING. Reserva 5 acciones.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. LIMIT SELL 5 @ 50 (sobre mercado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "PENDING. Reserva 5 acciones.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"price\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SELL MARKET 11 (más de lo disponible)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Quedan 10 disponibles (20 − 10 reservadas): debe rechazarse.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instrument_id\": 1,\n  \"side\": \"SELL\",\n  \"type\": \"MARKET\",\n  \"quantity\": 11\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Insufficient shares\", () => pm.expect(pm.response.json().error).to.eql(\"Insufficient shares\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Portafolio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/portfolio",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "portfolio"
+              ]
+            },
+            "description": "Esperado: cash 998.635,60 (1.000.000 − 914,40 − 450 reservados) y DYCA con 10 acciones."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json(); const px = Number(pm.collectionVariables.get(\"dycaPrice\")); const h = p.holdings.find(x => x.instrument_id === 1);",
+                  "pm.test(\"Cash neto de reservas (1.000.000 − 20×precio − 450)\", () => pm.expect(Math.abs((p.cash - (1000000 - 20 * px - 450)))).to.be.below(0.005));",
+                  "pm.test(\"DYCA: 10 disponibles (20 − 10 reservadas)\", () => pm.expect(h && h.quantity).to.eql(10));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Órdenes (repetir en ~20 min)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Enable-Bugs",
+                "value": "{{bugsTier}}"
+              },
+              {
+                "key": "X-Candidate-Id",
+                "value": "{{candidateId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "Ver en qué estado quedó cada LIMIT. Si la compra @50 queda FILLED, el avg_cost_price del portafolio dice a qué precio se ejecutó: 45,72 = a mercado; 46,576 = al precio límite."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://dummy-api-topaz.vercel.app"
+    },
+    {
+      "key": "candidateId",
+      "value": "amaidana-postman-01"
+    },
+    {
+      "key": "bugsTier",
+      "value": "off"
+    },
+    {
+      "key": "capxPrice",
+      "value": ""
+    },
+    {
+      "key": "dycaPrice",
+      "value": ""
+    }
+  ]
+}
