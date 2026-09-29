@@ -6,6 +6,14 @@ Estrategia de calidad y suite automatizada para `app-qa`, una app de inversiones
 
 El foco no fue maximizar la cantidad de tests, sino **cubrir lo que más riesgo tiene en un sistema financiero**: que se cree o se pierda valor, o que el usuario vea un valor distinto del real.
 
+## En 30 segundos
+
+- **Objetivo:** validar los riesgos de negocio más críticos de una app de inversiones: que no se cree ni se pierda valor, y que lo que se muestra coincida con lo que se cobra.
+- **Estrategia:** automatización a nivel API, donde viven las reglas de negocio. La UI queda fuera de la automatización, con justificación.
+- **Herramientas:** Playwright + TypeScript, contratos con zod, CI en GitHub Actions.
+- **Confiabilidad:** una cuenta aislada por test (sin depender de `/reset`) y órdenes LIMIT verificadas contra invariantes, no contra tiempos.
+- **Resultado:** 6 bugs reales en el modo "correcto" de la API (uno crítico: se puede generar dinero con un precio negativo) y detección de los defectos inyectados en los niveles `easy`, `medium` y `hard`.
+
 ## Qué hay en este repositorio
 
 | Documento | Contenido |
@@ -66,7 +74,7 @@ La API aísla el estado por `X-Candidate-Id`. Cada test usa una cuenta propia (`
 
 ### 3. Las órdenes LIMIT se prueban con un modelo de referencia
 
-Las LIMIT se resuelven de forma no determinística: en la exploración, entre segundos y más de 20 minutos, con resultado aleatorio. **Ningún test espera un estado ni un tiempo.** En su lugar, [`src/ledger.ts`](src/ledger.ts) reconstruye el portafolio esperado a partir del historial de órdenes (FILLED liquida, PENDING reserva, REJECTED no afecta) y lo compara con lo que devuelve `/portfolio`. Si una orden cambia de estado entre dos lecturas, se vuelve a leer. Así el test es estable en cualquier escenario y detecta cualquier descuadre de dinero. Las reglas están en el [plan, sección 8](docs/TEST_PLAN.md#8-invariantes-del-modelo).
+Las LIMIT se resuelven de forma no determinística: en la exploración, entre segundos y más de 20 minutos, con resultado aleatorio. **Ningún test espera un estado ni un tiempo.** En su lugar, [`src/ledger.ts`](src/ledger.ts) reconstruye el portafolio esperado a partir del historial de órdenes (FILLED liquida, PENDING reserva, REJECTED no afecta) y lo compara con lo que devuelve `/portfolio`. Si una orden cambia de estado entre dos lecturas, se vuelve a leer. Así el test no depende de un estado temporal concreto y detecta inconsistencias entre el historial de órdenes y el portafolio, dentro de las reglas que el modelo representa. Las reglas están en el [plan, sección 8](docs/TEST_PLAN.md#8-invariantes-del-modelo).
 
 ### 4. Los bugs reales quedan visibles sin romper la suite
 
@@ -74,7 +82,7 @@ Los bugs encontrados en `off` tienen su test, que describe el comportamiento **c
 
 ### 5. Aserciones sobre comportamiento, no sobre "respondió 200"
 
-Cada test de órdenes verifica el efecto completo: la respuesta, el precio de ejecución, el cash al centavo, la cantidad, el costo promedio y el historial. En los rechazos verifica además que **la cuenta quedó intacta**. Todas las respuestas se validan contra su contrato ([`src/schemas.ts`](src/schemas.ts)), que replica lo que valida la propia app. Los tests están etiquetados por prioridad de riesgo (`@P0` a `@P2`).
+Cada test de órdenes verifica el efecto completo: la respuesta, el precio de ejecución, el cash al centavo, la cantidad, el costo promedio y el historial. En los rechazos verifica además que **la cuenta quedó intacta**. Todas las respuestas se validan contra su contrato ([`src/schemas.ts`](src/schemas.ts)). La fuente de verdad es la documentación de la consigna; los esquemas además replican lo que exige la app como consumidora de la API (su código valida cada respuesta con zod), así que un cambio de la API que rompería la app también rompe la suite. Los tests están etiquetados por prioridad de riesgo (`@P0` a `@P2`).
 
 ## Resultados
 
@@ -102,6 +110,12 @@ Entre los detectados: ventas de acciones que no se tienen (creación de dinero),
 
 ## Decisiones de diseño y lecciones aprendidas
 
+En síntesis:
+- **El aislamiento se verifica, no se asume.**
+- **Una aserción de infraestructura puede esconder un bug de negocio.**
+- **Los sistemas no determinísticos se prueban contra invariantes, no contra tiempos esperados.**
+- **La severidad se asigna con evidencia, no por intuición.**
+
 **Un error de aislamiento, detectado por la propia suite.** La primera versión generaba el identificador de corrida por worker, y los tests de un mismo archivo terminaban compartiendo cuenta. Los tests pasaban o fallaban según con quién coincidían en paralelo. Se detectó porque el mensaje de error listaba órdenes que el test nunca había creado. Se corrigió con un identificador único por corrida y un hash por test. Lección: **el aislamiento no se asume, se verifica**.
 
 **Una aserción menor escondía bugs críticos.** En `medium` y `hard`, crear una orden responde 200 en lugar de 201. Como todos los tests de órdenes exigían 201 en el primer paso, ese desvío cortaba 14 tests antes de verificar precios y saldos, y escondía la ejecución al precio de cierre y las órdenes pendientes. Ahora el helper acepta cualquier 2xx (igual que la app) y el 201 se verifica en un test propio. Lección: **cada test verifica un riesgo; una aserción menor al principio puede reducir la capacidad de diagnóstico de toda la suite**.
@@ -115,7 +129,7 @@ Entre los detectados: ventas de acciones que no se tienen (creación de dinero),
 ```
 src/
   config.ts        configuración de la corrida (nivel de bugs, URL, id de corrida)
-  schemas.ts       contratos de respuesta (zod), alineados con los de la app
+  schemas.ts       contratos de respuesta (zod): documentación + lo que exige la app
   api-client.ts    cliente de la API por cuenta: métodos crudos y tipados
   fixtures.ts      cuenta aislada por test, acción operable, fallos conocidos
   ledger.ts        modelo de referencia del portafolio a partir del historial
@@ -138,7 +152,7 @@ scripts/tier-matrix.mjs    matriz de detección por nivel de bugs
   - Pruebas de contrato con el equipo de la API, para acordar el esquema de errores (hoy inconsistente, BUG-06).
   - Monitoreo de tests inestables en la corrida nocturna.
   - Pruebas de performance en un entorno dedicado (la API de este challenge es compartida).
-  - Revisión de seguridad: hoy la identidad es un header sin autenticación.
+  - Revisión de seguridad: hoy la identidad es un header sin autenticación. No se reportó como bug porque es el mecanismo de aislamiento diseñado para el ejercicio, pero en un sistema real sería un riesgo a revisar.
 
 ## Uso de IA
 
