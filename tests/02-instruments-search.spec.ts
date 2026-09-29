@@ -64,3 +64,15 @@ test.describe("Búsqueda por ticker", () => {
     expect(await api.search(query)).toEqual([])
   })
 })
+
+test.describe("Coherencia en los precios", () => {
+  test("el precio listado coincide con el precio de ejecución", {tag: "@P1"}, async ({api}) => {
+    const instruments = await api.getInstruments()
+    const stocks = instruments.filter(i => i.type === "ACCIONES")
+
+    for (const stock of stocks) {
+      const order = await api.placeOrder({instrument_id: stock.id, side: "BUY", type: "MARKET", quantity: 1})
+      expect.soft(order.price, "precio de ejecución de " + stock.ticker).toBe(stock.last_price)
+    }
+  })
+})
