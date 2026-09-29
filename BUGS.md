@@ -38,7 +38,7 @@ Las respuestas citadas como evidencia son las obtenidas el 27 y 28/09/2026. Los 
 | [BUG-05](#bug-05) | Se acepta `quantity` como texto | API (`off`) | 🟡 Media | Test marcado como fallo conocido |
 | [BUG-06](#bug-06) | Mensajes de error inconsistentes, uno sin traducir en la app | API + App | 🟢 Baja | Exploración + código |
 | [INJ-01](#inj-01) | Se pueden vender acciones que no se tienen, y se cobran | `easy`+ | 🔴 Crítica | Suite (3 tests) |
-| [INJ-02](#inj-02) | Las órdenes MARKET se ejecutan al precio de cierre | `hard` | 🔴 Crítica | Suite |
+| [INJ-02](#inj-02) | Las órdenes MARKET se ejecutan al precio de cierre | `hard` | 🔴 Crítica | Suite (5 tests) |
 | [INJ-03](#inj-03) | MIRG se lista con `last_price` 0, pero se ejecuta a 40,88 | `easy`+ | 🟠 Alta | Suite |
 | [INJ-04](#inj-04) | Una cantidad decimal se acepta y se trunca | `medium`+ | 🟠 Alta | Suite |
 | [INJ-05](#inj-05) | Algunas órdenes MARKET quedan PENDING | `hard` | 🟠 Alta | Suite |
@@ -185,12 +185,12 @@ La API permite activar defectos con `X-Enable-Bugs`. Se usaron para **validar la
 
 | Nivel | Tests OK | Tests fallidos | Defectos distintos detectados |
 |---|---|---|---|
-| off | 42 | 0 | — |
-| easy | 37 | 5 | 3 |
-| medium | 35 | 7 | 5 |
-| hard | 30 | 12 | 8 |
+| off | 43 | 0 | — |
+| easy | 38 | 5 | 3 |
+| medium | 35 | 8 | 5 |
+| hard | 29 | 14 | 8 |
 
-Un mismo defecto puede hacer fallar varios tests (por ejemplo, INJ-01 rompe 3), por eso el reporte cuenta **defectos**, no tests fallidos. Para regenerar la matriz: `npm run tiers`.
+Un mismo defecto puede hacer fallar varios tests (por ejemplo, INJ-01 rompe 3), por eso el reporte cuenta **defectos**, no tests fallidos. Los tests fallidos en `easy`, `medium` y `hard` pueden variar levemente entre corridas: algunos defectos inyectados son intermitentes (INJ-05, INJ-06) y las LIMIT se resuelven al azar. Lo estable, y lo que importa, es que `off` pasa siempre completa y que el conjunto de defectos detectados se mantiene. Para regenerar la matriz: `npm run tiers`.
 
 ### INJ-01
 
@@ -216,7 +216,7 @@ Un mismo defecto puede hacer fallar varios tests (por ejemplo, INJ-01 rompe 3), 
 
 **Impacto de negocio:** el usuario paga (o cobra) un precio distinto del que ve en pantalla. En DYCA paga un 9,5% de más.
 
-**Detectado por:** *compra: se ejecuta al último precio…*, *venta parcial…* y *se puede usar el cash hasta el último peso…* (con el precio incorrecto, el cash ya no alcanza).
+**Detectado por:** *el precio listado coincide con el precio de ejecución* (reporta todas las acciones afectadas en una sola corrida), *compra: se ejecuta al último precio…*, *venta parcial…* y *se puede usar el cash hasta el último peso…* (con el precio incorrecto, el cash ya no alcanza).
 
 ### INJ-03
 
@@ -239,7 +239,7 @@ Un mismo defecto puede hacer fallar varios tests (por ejemplo, INJ-01 rompe 3), 
 
 **Nota de proceso:** la primera hipótesis fue "permite comprar gratis" (crítica). Se verificó antes de reportarla y se ajustó la severidad según la evidencia.
 
-**Detectado por:** *todos los precios son positivos*. Un test que compare el precio de `/instruments` con el de ejecución detectaría también la inconsistencia.
+**Detectado por:** *todos los precios son positivos* y *el precio listado coincide con el precio de ejecución*, que se agregó después de este hallazgo para cubrir la coherencia entre lo mostrado y lo cobrado.
 
 ### INJ-04
 

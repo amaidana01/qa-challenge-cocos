@@ -93,12 +93,12 @@ La API permite inyectar defectos con `X-Enable-Bugs`. Se usaron para **validar q
 
 | Nivel | Tests OK | Tests fallidos | Defectos distintos detectados |
 |---|---|---|---|
-| off | 42 | 0 | — |
-| easy | 37 | 5 | 3 |
-| medium | 35 | 7 | 5 |
-| hard | 30 | 12 | 8 |
+| off | 43 | 0 | — |
+| easy | 38 | 5 | 3 |
+| medium | 35 | 8 | 5 |
+| hard | 29 | 14 | 8 |
 
-Entre los detectados: ventas de acciones que no se tienen (creación de dinero), ejecución al precio de cierre en lugar del último, órdenes MARKET que quedan pendientes y respuestas que rompen el contrato de forma intermitente. `hard` no es "más ruidoso": sus defectos exclusivos solo se detectan verificando montos y contratos. Un mismo defecto puede romper varios tests, por eso se cuentan defectos y no tests.
+Entre los detectados: ventas de acciones que no se tienen (creación de dinero), ejecución al precio de cierre en lugar del último, órdenes MARKET que quedan pendientes y respuestas que rompen el contrato de forma intermitente. `hard` no es "más ruidoso": sus defectos exclusivos solo se detectan verificando montos y contratos. Un mismo defecto puede romper varios tests, por eso se cuentan defectos y no tests. Los tests fallidos en `easy`, `medium` y `hard` pueden variar levemente entre corridas: algunos defectos inyectados son intermitentes (INJ-05, INJ-06) y las LIMIT se resuelven al azar. Lo estable, y lo que importa, es que `off` pasa siempre completa y que el conjunto de defectos detectados se mantiene.
 
 ## Decisiones de diseño y lecciones aprendidas
 
