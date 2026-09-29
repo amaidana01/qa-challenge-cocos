@@ -1,7 +1,5 @@
 # Plan de pruebas — app-qa (Cocos)
 
-> **Borrador para revisar.** Las marcas 🟡 señalan decisiones de criterio para confirmar o ajustar.
-
 ## 1. Contexto y objetivo
 
 `app-qa` es una app de inversiones (React Native / Expo) que consume una API REST con instrumentos, búsqueda, portafolio y órdenes. El objetivo es **evaluar la calidad del sistema y automatizar la validación de lo que más riesgo tiene**, no cubrir todo.
@@ -29,6 +27,24 @@ Tres características del diseño definen la estrategia:
 
 ## 3. Mapa de riesgos
 
+### Eje principal: integridad financiera
+
+En una app de inversiones, el riesgo más grave no es que un endpoint "responda mal", sino que **el sistema cree o destruya valor**: que aparezca dinero o acciones que no existen, o que se pierdan. Por eso la pregunta rectora de la priorización es:
+
+> ¿Esta falla puede hacer que el sistema cree o pierda valor, o que muestre al usuario un valor distinto del real?
+
+Un ejemplo real, encontrado en la exploración (BUG-01), muestra cómo una validación faltante escala hasta comprometer la integridad financiera:
+
+```
+LIMIT con precio negativo (validación faltante)
+  → reserva negativa (−5)
+    → el cash disponible sube
+      → el usuario puede operar con dinero que no tiene
+        → integridad financiera comprometida
+```
+
+### Riesgos priorizados
+
 Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 
 | Prio | Área | Qué puede salir mal | Impacto | Cobertura |
@@ -39,7 +55,7 @@ Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 | **P0** | Aislamiento entre cuentas | Un candidato ve u opera el estado de otro | Fuga de datos, operaciones ajenas | API automatizada |
 | **P1** | Validación de entrada | Se aceptan cantidades no enteras, precios ≤ 0, tipos inválidos | Órdenes absurdas, efectos colaterales en el saldo | API automatizada |
 | **P1** | Integridad del portafolio | `avg_cost_price`, cantidades o precios incoherentes con las órdenes | Ganancia y rendimiento mal mostrados | API automatizada |
-| **P1** | Datos de mercado | Precios en 0, negativos, faltantes o duplicados | Compras gratis, retornos mal calculados | API automatizada |
+| **P1** | Datos de mercado | Precios en 0, negativos, faltantes o duplicados, o distintos entre endpoints | Precio mostrado distinto del cobrado, retornos mal calculados | API automatizada |
 | **P1** | Trazabilidad del historial | Las órdenes no reflejan lo pedido y lo ejecutado | Imposible auditar o dar soporte | API automatizada + reporte |
 | **P2** | Búsqueda | No encuentra por minúsculas o por coincidencia parcial | El usuario no encuentra el instrumento | API automatizada |
 | **P2** | Contrato de respuestas | Cambian campos o tipos y la app deja de mostrar datos | Pantallas con error | Validación de esquema |
@@ -52,7 +68,7 @@ Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 |---|---|---|
 | **API** | ✅ **Automatizado, foco principal** | Es donde viven las reglas de negocio y el riesgo financiero. Tests rápidos (segundos), estables, sin dependencias de dispositivo, y permiten probar casos que la UI bloquea |
 | **Lógica del cliente** | ✅ Ya cubierta | El repo trae tests unitarios de cálculos, validación y formato. No se duplican |
-| **UI (simulador)** | ❌ **Fuera de la automatización** 🟡 | Ver sección 6. Se explora manualmente y se documentan los problemas de testabilidad |
+| **UI (simulador)** | ❌ **Fuera de la automatización** | Ver sección 6 |
 
 **Herramienta: Playwright Test (TypeScript).** Trae cliente HTTP, paralelismo, reintentos, reportes HTML/JUnit y marcado de fallos conocidos, sin librerías extra. Usa el mismo lenguaje que el repo de la app.
 
@@ -75,7 +91,7 @@ Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 
 ### Órdenes LIMIT y reservas (P0)
 - Toda LIMIT se crea `PENDING`.
-- **Invariante principal:** el portafolio debe poder reconstruirse a partir del historial de órdenes (FILLED liquida, PENDING reserva, REJECTED no afecta). Se verifica sea cual sea el estado en que quedó cada orden. Ver sección 8.
+- **Invariante principal:** el portafolio debe poder reconstruirse a partir del historial de órdenes (FILLED liquida, PENDING reserva, REJECTED no afecta). Se verifica sea cual sea el estado en que quedó cada orden. Ver sección 9.
 - Una venta LIMIT pendiente reserva acciones, y una venta MARKET por encima de lo disponible se rechaza.
 - Si una LIMIT se ejecuta, el precio respeta el límite (compra ≤ límite, venta ≥ límite).
 
@@ -91,7 +107,7 @@ Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 
 | Qué | Por qué |
 |---|---|
-| **Automatización de UI** 🟡 | La app no tiene `testID` (solo etiquetas de accesibilidad que incluyen precios, por lo que cambian), usa alertas nativas y toasts temporales, y los gráficos no son inspeccionables. Automatizarla exigiría modificar la app y sería costosa y frágil, mientras el riesgo principal está en la API. Se documenta como hallazgo de testabilidad, con el cambio propuesto |
+| **Automatización de UI** | **La razón principal es dónde está el riesgo:** las reglas de negocio y el dinero se validan y liquidan en la API, y la API permite probar casos que la UI bloquea (la app valida el formulario antes de enviar). Probar a ese nivel da tests más determinísticos, aislados y rápidos. Como factores adicionales: la app tiene problemas de testabilidad (APP-01: sin `testID`, etiquetas con precios, alertas nativas, toasts, gráficos en canvas) y un costo de infraestructura alto (APP-02: Xcode, simulador, más de 25 GB, builds largos y una incompatibilidad con el Xcode actual). En un equipo real, se automatizarían por UI 2 o 3 flujos críticos de punta a punta, después de agregar `testID`. La lógica de presentación ya tiene tests unitarios en el repo de la app |
 | Pruebas de carga y performance | El entorno es compartido entre candidatos: cargarlo afectaría a otros. No es un objetivo del challenge |
 | Seguridad más allá del aislamiento | No hay autenticación real: la identidad es un header. Se reporta como observación, sin intentar acceder a cuentas ajenas |
 | Estadística del tiempo de resolución de LIMIT | Es aleatorio por diseño. Se prueban invariantes, no tiempos |
@@ -105,10 +121,29 @@ Prioridad = impacto × probabilidad. P0 es lo que no puede fallar nunca.
 2. Los montos se comparan redondeados a centavos, para evitar falsos fallos de aritmética decimal.
 3. Los precios fueron estáticos durante la exploración, pero **los tests no lo asumen**: leen el precio vigente antes de operar.
 4. Que una LIMIT se ejecute a un precio mejor que el límite (price improvement) es válido.
-5. `side`/`type` en minúsculas y la búsqueda vacía devolviendo todo se tratan como observaciones, no bugs, porque la documentación no las define. 🟡
-6. El instrumento `ARS` (tipo MONEDA) no debería ser operable. Se reporta como observación con dos alternativas. 🟡
+5. `side`/`type` en minúsculas y la búsqueda vacía devolviendo todo se tratan como observaciones, no bugs, porque la documentación no las define.
+6. El instrumento `ARS` (tipo MONEDA) no debería ser operable. Se reporta con dos alternativas (BUG-04) porque la documentación no lo define.
+7. El valor de mercado, la ganancia y el rendimiento los calcula la app, no la API. La suite valida los insumos que entrega la API (cantidad, precios, costo promedio); los cálculos de presentación están cubiertos por los tests unitarios del repo de la app.
 
-## 8. Cómo se manejan las LIMIT no determinísticas
+## 8. Invariantes del modelo
+
+Son las reglas que tienen que cumplirse siempre, sea cual sea el estado de las órdenes. Salen de la documentación y se confirmaron en la exploración. Son la base del modelo de referencia de la suite (`src/ledger.ts`).
+
+Para una cuenta que arranca con 1.000.000 de cash:
+
+| Qué | Regla |
+|---|---|
+| **Cash disponible** | 1.000.000 − Σ compras FILLED (cantidad × precio de ejecución) + Σ ventas FILLED (cantidad × precio de ejecución) − Σ compras PENDING (cantidad × precio límite) |
+| **Acciones disponibles** por instrumento | Σ compras FILLED − Σ ventas FILLED − Σ ventas PENDING |
+| **Costo promedio** | Promedio ponderado de las compras ejecutadas. **Vender no lo modifica** |
+| **REJECTED** | No afecta cash ni acciones: libera cualquier reserva |
+| **MARKET** | Se ejecuta de inmediato (`FILLED`) al `last_price` |
+| **LIMIT** | Nace `PENDING` y solo puede pasar a `FILLED` o `REJECTED`. Si se ejecuta, una compra no paga más que su límite y una venta no cobra menos |
+| **Límites** | El cash disponible y las acciones disponibles nunca son negativos. El cash nunca supera lo que explican las ventas ejecutadas |
+
+**Importante:** las PENDING **sí** afectan lo que muestra `/portfolio`, porque la documentación indica que cash y tenencias van **netos de lo reservado**. Se comprobó en la exploración: con 10 acciones y una venta LIMIT pendiente de 6, el portafolio muestra 4.
+
+## 9. Cómo se manejan las LIMIT no determinísticas
 
 Una LIMIT puede resolverse en segundos o en más de 20 minutos, con resultado aleatorio. Por eso **ningún test espera un estado concreto ni un tiempo**. En cambio:
 
@@ -119,7 +154,7 @@ Una LIMIT puede resolverse en segundos o en más de 20 minutos, con resultado al
 
 Así el test es estable en cualquier escenario y detecta cualquier descuadre de dinero.
 
-## 9. Aislamiento y datos de prueba
+## 10. Aislamiento y datos de prueba
 
 - **Cada test usa su propio `X-Candidate-Id`** (`amaidana-<corrida>-<test>`): arranca con una cuenta nueva de 1.000.000, sin depender de otros tests ni del orden de ejecución. Permite correr en paralelo.
 - No se depende de `/reset` para aislar. Se usa solo para probar el propio reset.
@@ -134,8 +169,9 @@ La consigna pide explicarlo. La estrategia, en orden de preferencia:
 4. **Pool de cuentas con lock**, para que dos corridas paralelas no usen la misma cuenta.
 5. **Datos de solo lectura** (instrumentos) sin restricciones: no mutan.
 
-## 10. Criterios de éxito de la suite
+## 11. Criterios de éxito de la suite
 
-- Con `off`, **pasa completa**. Los bugs reales encontrados en `off` quedan marcados como **fallos conocidos** vinculados al reporte: la suite queda en verde, y si alguien corrige el bug, el test avisa.
-- Con `easy`, `medium` y `hard`, **empieza a fallar**, y cada fallo apunta a un riesgo del mapa.
+- Con `off`, **pasa completa**. Los bugs reales encontrados en `off` quedan marcados como **fallos conocidos** vinculados a `BUGS.md`: la suite queda en verde sin esconderlos, y si alguien corrige el bug, el test "pasa inesperadamente" y avisa que hay que quitar la marca.
+- **Sensibilidad ante defectos inyectados:** con `easy`, `medium` y `hard` la suite tiene que fallar, y cada fallo tiene que apuntar a un riesgo del mapa. Los niveles de la API se usan como mecanismo para validar que la suite detecta distintas categorías de regresión, no como métrica de calidad en sí.
+- La cantidad de tests no es un objetivo: surge de cubrir los riesgos del mapa y los bugs encontrados.
 - Una sola forma de ejecutarla, reporte HTML y JUnit, y ejecución automática en GitHub Actions.
