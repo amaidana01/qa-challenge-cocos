@@ -39,7 +39,7 @@ Las respuestas citadas como evidencia son las obtenidas el 27 y 28/09/2026. Los 
 | [BUG-06](#bug-06) | Mensajes de error inconsistentes, uno sin traducir en la app | API + App | 🟢 Baja | Exploración + código |
 | [INJ-01](#inj-01) | Se pueden vender acciones que no se tienen, y se cobran | `easy`+ | 🔴 Crítica | Suite (3 tests) |
 | [INJ-02](#inj-02) | Las órdenes MARKET se ejecutan al precio de cierre | `hard` | 🔴 Crítica | Suite |
-| [INJ-03](#inj-03) | MIRG cotiza con `last_price` 0 | `easy`+ | 🔴 Crítica | Suite |
+| [INJ-03](#inj-03) | MIRG se lista con `last_price` 0, pero se ejecuta a 40,88 | `easy`+ | 🟠 Alta | Suite |
 | [INJ-04](#inj-04) | Una cantidad decimal se acepta y se trunca | `medium`+ | 🟠 Alta | Suite |
 | [INJ-05](#inj-05) | Algunas órdenes MARKET quedan PENDING | `hard` | 🟠 Alta | Suite |
 | [INJ-06](#inj-06) | El portafolio omite a veces el campo `ticker` | `hard` | 🟠 Alta | Suite (contrato) |
@@ -220,18 +220,26 @@ Un mismo defecto puede hacer fallar varios tests (por ejemplo, INJ-01 rompe 3), 
 
 ### INJ-03
 
-**MIRG cotiza con `last_price` 0.** 🔴 Crítica · `easy`, `medium`, `hard`
+**MIRG se lista con `last_price` 0, pero las órdenes se ejecutan a 40,88.** 🟠 Alta · `easy`, `medium`, `hard`
 
-**Obtenido:**
+**Obtenido en `GET /instruments`:**
 ```json
 {"id":5,"ticker":"MIRG","name":"Mirgor","type":"ACCIONES","last_price":0,"close_price":37.74}
 ```
 
-**Esperado:** precio positivo (en `off`: 40,88).
+**Verificación del impacto** (`easy`, cuenta nueva): una compra MARKET de 100 MIRG **no** se ejecuta gratis. Se ejecuta a **40,88**, el precio correcto, y el portafolio muestra `last_price: 40.88`:
+```json
+{"quantity":100,"price":40.88,"status":"FILLED"}
+{"cash":995912,"holdings":[{"ticker":"MIRG","quantity":100,"last_price":40.88,"avg_cost_price":40.88}]}
+```
 
-**Impacto de negocio:** como las órdenes MARKET se ejecutan al `last_price`, habilita potencialmente **compras gratis**. En la app, el retorno diario de MIRG se vería como −100%, y el valor de mercado de quien lo tenga daría 0.
+**Esperado:** el mismo precio positivo en todos los endpoints (en `off`: 40,88).
 
-**Detectado por:** *todos los precios son positivos*.
+**Impacto de negocio:** el defecto está en el **dato de mercado que se muestra**, no en la ejecución. El usuario ve MIRG a $0, con un retorno diario de −100%. En el formulario, la app no puede calcular el total estimado, y en el modo "monto en pesos" calcula 0 acciones. Pero si opera, paga $40,88 por acción. **Lo que se muestra y lo que se cobra no coinciden**, y además `/instruments` y `/portfolio` informan precios distintos para el mismo instrumento.
+
+**Nota de proceso:** la primera hipótesis fue "permite comprar gratis" (crítica). Se verificó antes de reportarla y se ajustó la severidad según la evidencia.
+
+**Detectado por:** *todos los precios son positivos*. Un test que compare el precio de `/instruments` con el de ejecución detectaría también la inconsistencia.
 
 ### INJ-04
 
