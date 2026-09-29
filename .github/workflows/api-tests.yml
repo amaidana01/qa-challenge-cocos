@@ -1,0 +1,74 @@
+name: API tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      bugs_tier:
+        description: "Nivel de X-Enable-Bugs"
+        type: choice
+        options: [off, easy, medium, hard]
+        default: "off"
+  schedule:
+    - cron: "0 9 * * *" # todos los días: suite completa + tests lentos + matriz de niveles
+
+permissions:
+  contents: read
+  checks: write # para publicar el resultado JUnit en la pestaña de checks
+
+jobs:
+  # En cada cambio: la suite rápida contra el golden path. Tiene que pasar.
+  golden-path:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx playwright test
+        env:
+          BUGS_TIER: ${{ inputs.bugs_tier || 'off' }}
+          CANDIDATE_PREFIX: amaidana-ci
+          RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-${{ inputs.bugs_tier || 'off' }}
+          path: reports/
+      - uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: reports/junit.xml
+
+  # De noche: los 4 niveles (mide la capacidad de detección) y los tests lentos.
+  nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [off, easy, medium, hard]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright test
+        continue-on-error: ${{ matrix.tier != 'off' }}
+        env:
+          BUGS_TIER: ${{ matrix.tier }}
+          RUN_SLOW: "1"
+          CANDIDATE_PREFIX: amaidana-nightly
+          RUN_ID: ${{ github.run_id }}-${{ matrix.tier }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-report-${{ matrix.tier }}
+          path: reports/
