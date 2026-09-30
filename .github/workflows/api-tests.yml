@@ -8,8 +8,12 @@ on:
       bugs_tier:
         description: "Nivel de X-Enable-Bugs"
         type: choice
-        options: [off, easy, medium, hard]
+        options: ["off", "easy", "medium", "hard"]
         default: "off"
+      nightly:
+        description: "Correr la matriz nocturna completa (4 niveles + tests lentos)"
+        type: boolean
+        default: false
   schedule:
     - cron: "0 9 * * *" # todos los días: suite completa + tests lentos + matriz de niveles
 
@@ -20,7 +24,7 @@ permissions:
 jobs:
   # En cada cambio: la suite rápida contra el golden path. Tiene que pasar.
   golden-path:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && !inputs.nightly
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,14 +49,15 @@ jobs:
         with:
           report_paths: reports/junit.xml
 
-  # De noche: los 4 niveles (mide la capacidad de detección) y los tests lentos.
+  # De noche (o a mano, con la opción "nightly"): los 4 niveles, que miden la
+  # capacidad de detección, y los tests lentos.
   nightly:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || inputs.nightly
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        tier: [off, easy, medium, hard]
+        tier: ["off", "easy", "medium", "hard"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
