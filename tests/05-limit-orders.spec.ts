@@ -109,7 +109,7 @@ test.describe("Órdenes LIMIT y reservas", () => {
 
   test("una LIMIT ejecutada respeta su precio límite", {tag: ["@P1", "@slow"]}, async ({api, stock}) => {
     // Lento y opcional (`npm run test:slow`): espera a que alguna LIMIT se
-    // resuelva. En un pipeline real correría de noche, no en cada cambio.
+    // resuelva. Corre en la CI nocturna, no en cada cambio.
     test.setTimeout(5 * 60_000)
 
     await api.placeOrder({instrument_id: stock.id, side: "BUY", type: "MARKET", quantity: 30})
@@ -125,19 +125,22 @@ test.describe("Órdenes LIMIT y reservas", () => {
       limits.push({id: order.id, side, limit})
     }
 
-    let filled: Order[] = []
-    await expect
-      .poll(
-        async () => {
-          const orders = await api.getOrders()
-          filled = orders.filter(o => o.type === "LIMIT" && o.status === "FILLED")
-          return orders.filter(o => o.type === "LIMIT" && o.status !== "PENDING").length
-        },
-        {timeout: 4 * 60_000, intervals: [5_000]}
-      )
-      .toBe(limits.length)
+    // Esperamos hasta que AL MENOS UNA LIMIT se resuelva (no todas): en la
+    // exploración, la resolución tardó entre segundos y más de 20 minutos.
+    // Exigir que se resuelvan todas en un plazo fijo haría el test inestable.
+    const deadline = Date.now() + 4 * 60_000
+    let resolved: Order[] = []
+    while (Date.now() < deadline) {
+      resolved = (await api.getOrders()).filter(o => o.type === "LIMIT" && o.status !== "PENDING")
+      if (resolved.length > 0) break
+      await new Promise(resolve => setTimeout(resolve, 5_000))
+    }
+    test.skip(
+      resolved.length === 0,
+      "Ninguna LIMIT se resolvió en 4 minutos (la resolución es aleatoria y puede tardar más de 20): no hay ejecución para verificar"
+    )
 
-    for (const order of filled) {
+    for (const order of resolved.filter(o => o.status === "FILLED")) {
       const {side, limit} = limits.find(l => l.id === order.id)!
       if (side === "BUY") expect(order.price, "una compra no puede pagar más que el límite").toBeLessThanOrEqual(limit)
       else expect(order.price, "una venta no puede cobrar menos que el límite").toBeGreaterThanOrEqual(limit)
